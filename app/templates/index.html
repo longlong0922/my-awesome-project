@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简历优化 Agent</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-shell">
+        <nav class="top-nav">
+            <div class="brand">
+                <span class="brand-mark">AI</span>
+                <div>
+                    <p class="eyebrow">Resume Optimizer</p>
+                    <h1>简历优化 Agent</h1>
+                </div>
+            </div>
+            <div class="nav-actions">
+                <button id="nav-back" class="btn btn-secondary" onclick="goBack()" hidden>返回上一步</button>
+                <button class="btn btn-ghost" onclick="startOver()">新建会话</button>
+                <button class="btn btn-secondary" onclick="toggleHistory()">历史记录</button>
+            </div>
+        </nav>
+
+        <main>
+            <section id="step-input" class="page active">
+                <div class="container">
+                    <div class="card hero-card">
+                        <div class="section-intro">
+                            <p class="eyebrow">Input</p>
+                            <h2>上传或粘贴简历，开始分析与编辑</h2>
+                            <p class="muted">支持 PDF、DOCX、TXT、Markdown 文件。你可以先做 JD 匹配分析，也可以直接进入结构化编辑器。</p>
+                        </div>
+
+                        <div class="input-grid">
+                            <div class="input-group">
+                                <label for="resume">简历内容</label>
+                                <div class="upload-bar">
+                                    <label class="btn btn-small btn-secondary upload-btn">
+                                        上传文件
+                                        <input type="file" id="resume-file" accept=".pdf,.docx,.txt,.md" hidden onchange="handleFileUpload(this)">
+                                    </label>
+                                    <span id="upload-status" class="upload-status"></span>
+                                </div>
+                                <textarea id="resume" placeholder="粘贴简历内容，或上传文件自动提取文本"></textarea>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="jd">目标职位描述 (JD)</label>
+                                <textarea id="jd" placeholder="粘贴目标职位描述，用于匹配分析、定向优化和局部 AI 润色"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="action-bar">
+                            <button class="btn btn-primary" onclick="doAnalyze()">分析匹配度</button>
+                            <button class="btn btn-secondary" onclick="doParseAndEdit()">直接解析并编辑</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="step-analysis" class="page">
+                <div class="container">
+                    <div class="card">
+                        <div class="section-intro compact">
+                            <p class="eyebrow">Analysis</p>
+                            <h2>JD 匹配分析结果</h2>
+                        </div>
+                        <div id="analysis-content"></div>
+                        <div class="action-bar">
+                            <button class="btn btn-secondary" onclick="goBack('step-input')">返回上一步</button>
+                            <button class="btn btn-primary" onclick="doOptimizeAndEdit()">生成优化简历并编辑</button>
+                            <button class="btn btn-secondary" onclick="doParseAndEdit()">解析原简历并编辑</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="step-editor" class="page">
+                <div class="editor-layout">
+                    <section class="editor-panel">
+                        <div class="editor-toolbar">
+                            <div>
+                                <p class="eyebrow">Editor</p>
+                                <h2>结构化简历编辑器</h2>
+                                <p class="muted">支持逐段修改、AI 局部润色、自动保存与历史恢复。</p>
+                            </div>
+                            <div class="toolbar-actions">
+                                <span id="save-state" class="save-state idle">未保存</span>
+                                <button class="btn btn-small btn-secondary" onclick="goBack('step-input')">返回上一步</button>
+                                <button class="btn btn-small btn-ghost" onclick="showPage('step-input')">输入页</button>
+                            </div>
+                        </div>
+                        <div id="editor-sections" class="editor-sections"></div>
+                    </section>
+
+                    <aside class="preview-panel">
+                        <div class="preview-toolbar">
+                            <div>
+                                <p class="eyebrow">Preview</p>
+                                <h3>实时预览</h3>
+                                <p class="muted">导出内容始终基于当前编辑结果。</p>
+                            </div>
+                            <div class="toolbar-actions">
+                                <button class="btn btn-small btn-secondary" onclick="copyMarkdown()">复制 Markdown</button>
+                                <button class="btn btn-small btn-primary" onclick="exportMarkdown()">导出 MD</button>
+                                <button class="btn btn-small btn-primary" onclick="exportPdf()">导出 PDF</button>
+                            </div>
+                        </div>
+                        <div id="preview-content" class="preview-content"></div>
+                    </aside>
+                </div>
+            </section>
+
+            <section id="step-history" class="page">
+                <div class="container">
+                    <div class="card">
+                        <div class="section-intro compact">
+                            <p class="eyebrow">History</p>
+                            <h2>历史记录</h2>
+                            <p class="muted">支持加载已分析或已编辑的简历会话。</p>
+                        </div>
+                        <div id="history-content">
+                            <p class="muted">加载中...</p>
+                        </div>
+                        <div class="action-bar">
+                            <button class="btn btn-secondary" onclick="closeHistory()">返回</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <div id="loading" class="loading-overlay">
+            <div class="spinner"></div>
+            <p id="loading-text">AI 正在处理中...</p>
+        </div>
+
+        <datalist id="target-position-options">
+            <option value="AI Agent 工程师"></option>
+            <option value="大模型应用开发工程师"></option>
+            <option value="大模型算法工程师"></option>
+            <option value="RAG 工程师"></option>
+            <option value="Agent 平台工程师"></option>
+            <option value="NLP 算法工程师"></option>
+            <option value="后端开发工程师"></option>
+            <option value="数据工程师"></option>
+            <option value="MLOps 工程师"></option>
+            <option value="平台架构工程师"></option>
+            <option value="AI 产品经理"></option>
+        </datalist>
+
+        <datalist id="position-options">
+            <option value="大模型应用开发实习生"></option>
+            <option value="AI Agent 工程师"></option>
+            <option value="大模型应用开发工程师"></option>
+            <option value="大模型算法工程师"></option>
+            <option value="RAG 工程师"></option>
+            <option value="后端开发工程师"></option>
+            <option value="算法工程师"></option>
+            <option value="平台研发工程师"></option>
+            <option value="NLP 算法工程师"></option>
+            <option value="技术负责人"></option>
+        </datalist>
+
+        <datalist id="project-role-options">
+            <option value="核心开发"></option>
+            <option value="技术负责人"></option>
+            <option value="项目负责人"></option>
+            <option value="算法工程师"></option>
+            <option value="后端工程师"></option>
+            <option value="架构设计"></option>
+            <option value="方案设计"></option>
+            <option value="产品负责人"></option>
+        </datalist>
+
+        <datalist id="city-options">
+            <option value="北京"></option>
+            <option value="上海"></option>
+            <option value="深圳"></option>
+            <option value="广州"></option>
+            <option value="杭州"></option>
+            <option value="成都"></option>
+            <option value="南京"></option>
+            <option value="苏州"></option>
+            <option value="武汉"></option>
+            <option value="西安"></option>
+            <option value="远程"></option>
+        </datalist>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
