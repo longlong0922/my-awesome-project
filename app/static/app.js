@@ -3,22 +3,31 @@ let structuredData = null;
 let currentJd = "";
 let saveTimer = null;
 let currentPageId = "step-input";
-let lastPageId = null;
+let pageHistory = ["step-input"];
+let pageHistoryIndex = 0;
 let compareBaseline = null;
 let compareVisible = false;
 
 
-function showPage(id) {
-    if (currentPageId && currentPageId !== id) {
-        lastPageId = currentPageId;
-    }
-    document.querySelectorAll(".page").forEach((page) => page.classList.remove("active"));
+function showPage(id, options = {}) {
+    const { preserveHistory = false, replace = false } = options;
     const target = document.getElementById(id);
-    if (target) {
-        target.classList.add("active");
+    if (!target) return;
+
+    if (!preserveHistory) {
+        if (replace) {
+            pageHistory[pageHistoryIndex] = id;
+        } else if (pageHistory[pageHistoryIndex] !== id) {
+            pageHistory = pageHistory.slice(0, pageHistoryIndex + 1);
+            pageHistory.push(id);
+            pageHistoryIndex = pageHistory.length - 1;
+        }
     }
+
+    document.querySelectorAll(".page").forEach((page) => page.classList.remove("active"));
+    target.classList.add("active");
     currentPageId = id;
-    updateBackButton();
+    updateNavigationButtons();
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -155,10 +164,15 @@ function setInputValues(resume, jd) {
 }
 
 
-function updateBackButton() {
-    const button = document.getElementById("nav-back");
-    if (!button) return;
-    button.hidden = !lastPageId || lastPageId === currentPageId;
+function updateNavigationButtons() {
+    const backButton = document.getElementById("nav-back");
+    const forwardButton = document.getElementById("nav-forward");
+    if (backButton) {
+        backButton.hidden = pageHistoryIndex <= 0;
+    }
+    if (forwardButton) {
+        forwardButton.hidden = pageHistoryIndex >= pageHistory.length - 1;
+    }
 }
 
 
@@ -222,8 +236,21 @@ function toggleCompareView() {
 
 
 function goBack(fallback = "step-input") {
-    if (lastPageId && lastPageId !== currentPageId) {
-        showPage(lastPageId);
+    if (pageHistoryIndex > 0) {
+        pageHistoryIndex -= 1;
+        showPage(pageHistory[pageHistoryIndex], { preserveHistory: true });
+        return;
+    }
+    if (fallback && fallback !== currentPageId) {
+        showPage(fallback);
+    }
+}
+
+
+function goForward(fallback = "") {
+    if (pageHistoryIndex < pageHistory.length - 1) {
+        pageHistoryIndex += 1;
+        showPage(pageHistory[pageHistoryIndex], { preserveHistory: true });
         return;
     }
     if (fallback && fallback !== currentPageId) {
@@ -238,7 +265,8 @@ function startOver() {
     currentJd = "";
     clearTimeout(saveTimer);
     clearCompareState();
-    lastPageId = null;
+    pageHistory = ["step-input"];
+    pageHistoryIndex = 0;
     currentPageId = "step-input";
     setInputValues("", "");
     document.getElementById("analysis-content").innerHTML = "";
@@ -247,8 +275,8 @@ function startOver() {
     document.getElementById("upload-status").textContent = "";
     document.getElementById("resume-file").value = "";
     setSaveState("idle", "未保存");
-    updateBackButton();
-    showPage("step-input");
+    updateNavigationButtons();
+    showPage("step-input", { preserveHistory: true });
 }
 
 
@@ -1502,7 +1530,7 @@ async function deleteHistory(sessionId) {
 
 window.addEventListener("load", () => {
     setSaveState("idle", "未保存");
-    updateBackButton();
+    updateNavigationButtons();
     updateCompareButton();
     updatePreview();
 });
