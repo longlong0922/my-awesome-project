@@ -487,7 +487,7 @@ async def polish(req: PolishRequest):
         raise HTTPException(status_code=400, detail="内容不能为空")
 
     system_prompt = load_prompt("polish_section").format(action=req.action, jd=req.jd or "（未提供）")
-    result = call_llm(system_prompt, req.content, temperature=0.7)
+    result = call_llm(system_prompt, req.content, temperature=0.45)
     return {"result": result.strip()}
 
 
@@ -505,7 +505,7 @@ async def optimize(req: OptimizeRequest):
         jd=row["jd"],
         analysis=row["analysis_raw"] or "（暂无分析结果）",
     )
-    optimized_markdown = call_llm(system_prompt, user_prompt)
+    optimized_markdown = call_llm(system_prompt, user_prompt, temperature=0.45)
 
     with get_db() as conn:
         conn.execute(

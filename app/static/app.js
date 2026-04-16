@@ -4,6 +4,8 @@ let currentJd = "";
 let saveTimer = null;
 let currentPageId = "step-input";
 let lastPageId = null;
+let compareBaseline = null;
+let compareVisible = false;
 
 
 function showPage(id) {
@@ -116,6 +118,11 @@ function ensureStructuredData(data) {
 }
 
 
+function deepClone(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+
 function setSaveState(type, message) {
     const el = document.getElementById("save-state");
     if (!el) return;
@@ -155,6 +162,65 @@ function updateBackButton() {
 }
 
 
+function hasCompareState() {
+    if (!compareBaseline || !structuredData) return false;
+    if (compareBaseline.type === "structured") {
+        return Boolean(compareBaseline.data);
+    }
+    return Boolean(String(compareBaseline.text || "").trim());
+}
+
+
+function updateCompareButton() {
+    const button = document.getElementById("compare-toggle");
+    if (!button) return;
+    const visible = hasCompareState();
+    button.hidden = !visible;
+    button.textContent = compareVisible ? "关闭对比" : "查看对比";
+}
+
+
+function clearCompareState() {
+    compareBaseline = null;
+    compareVisible = false;
+    updateCompareButton();
+}
+
+
+function setCompareBaselineFromRaw(text, title = "优化前原简历", autoOpen = false) {
+    const value = String(text || "").trim();
+    if (!value) {
+        clearCompareState();
+        return;
+    }
+    compareBaseline = { type: "raw", title, text: value };
+    compareVisible = autoOpen;
+    updateCompareButton();
+}
+
+
+function setCompareBaselineFromStructured(data, title = "优化前版本", autoOpen = false) {
+    compareBaseline = {
+        type: "structured",
+        title,
+        data: ensureStructuredData(deepClone(data)),
+    };
+    compareVisible = autoOpen;
+    updateCompareButton();
+}
+
+
+function toggleCompareView() {
+    if (!hasCompareState()) {
+        showToast("当前没有可对比的优化前内容");
+        return;
+    }
+    compareVisible = !compareVisible;
+    updateCompareButton();
+    updatePreview();
+}
+
+
 function goBack(fallback = "step-input") {
     if (lastPageId && lastPageId !== currentPageId) {
         showPage(lastPageId);
@@ -171,6 +237,7 @@ function startOver() {
     structuredData = null;
     currentJd = "";
     clearTimeout(saveTimer);
+    clearCompareState();
     lastPageId = null;
     currentPageId = "step-input";
     setInputValues("", "");
@@ -245,6 +312,7 @@ async function doAnalyze() {
         }
 
         currentSessionId = data.session_id;
+        clearCompareState();
         renderAnalysis(data.analysis || {});
         showPage("step-analysis");
     } catch (error) {
@@ -345,6 +413,7 @@ async function doParseAndEdit() {
 
         currentSessionId = data.session_id;
         structuredData = ensureStructuredData(data.structured);
+        clearCompareState();
         renderEditor();
         updatePreview();
         setSaveState("saved", "已保存");
@@ -394,6 +463,7 @@ async function doOptimizeAndEdit() {
 
         currentSessionId = parseData.session_id;
         structuredData = ensureStructuredData(parseData.structured);
+        setCompareBaselineFromRaw(document.getElementById("resume").value.trim(), "原始简历", true);
         renderEditor();
         updatePreview();
         setSaveState("saved", "已保存");
@@ -1026,9 +1096,14 @@ function updatePreview() {
     const preview = document.getElementById("preview-content");
     if (!structuredData) {
         preview.innerHTML = '<div class="preview-empty">编辑器中还没有内容。</div>';
+        updateCompareButton();
         return;
     }
-    preview.innerHTML = generatePreviewHtml(ensureStructuredData(structuredData));
+    const data = ensureStructuredData(structuredData);
+    preview.innerHTML = compareVisible && hasCompareState()
+        ? generateCompareHtml(compareBaseline, data)
+        : generatePreviewHtml(data);
+    updateCompareButton();
 }
 
 
@@ -1108,6 +1183,58 @@ function generatePreviewHtml(data) {
 
     html += "</article>";
     return html;
+}
+
+
+function generateCompareHtml(baseline, currentData) {
+    const beforeHtml = baseline.type === "structured"
+        ? generatePreviewHtml(ensureStructuredData(baseline.data))
+        : generateRawResumePreviewHtml(baseline);
+
+    return `
+        <div class="compare-shell">
+            <div class="compare-banner">
+                对比仅用于页面查看，导出的 Markdown 和 PDF 只包含当前版本。
+            </div>
+            <div class="compare-grid">
+                <section class="compare-column">
+                    <div class="compare-header compare-before">
+                        <p class="eyebrow">Before</p>
+                        <h4>${escapeHtml(baseline.title || "优化前")}</h4>
+                    </div>
+                    <div class="compare-card compare-before">
+                        ${beforeHtml}
+                    </div>
+                </section>
+                <section class="compare-column">
+                    <div class="compare-header compare-after">
+                        <p class="eyebrow">After</p>
+                        <h4>当前版本</h4>
+                    </div>
+                    <div class="compare-card compare-after">
+                        ${generatePreviewHtml(currentData)}
+                    </div>
+                </section>
+            </div>
+        </div>
+    `;
+}
+
+
+function generateRawResumePreviewHtml(baseline) {
+    return `
+        <article class="resume-paper raw-resume-paper">
+            <header class="resume-header">
+                <h1>原始简历内容</h1>
+                <div class="resume-meta">
+                    <span>保留上传/输入时的原文视图</span>
+                </div>
+            </header>
+            <section class="resume-section">
+                ${renderRichText(String(baseline.text || ""))}
+            </section>
+        </article>
+    `;
 }
 
 
@@ -1327,6 +1454,11 @@ async function loadSession(sessionId) {
 
         if (data.structured_data) {
             structuredData = ensureStructuredData(data.structured_data);
+            if (data.optimized_resume && data.resume) {
+                setCompareBaselineFromRaw(data.resume, "原始简历", true);
+            } else {
+                clearCompareState();
+            }
             renderEditor();
             updatePreview();
             setSaveState("saved", "已加载历史记录");
@@ -1335,11 +1467,13 @@ async function loadSession(sessionId) {
         }
 
         if (data.analysis) {
+            clearCompareState();
             renderAnalysis(data.analysis);
             showPage("step-analysis");
             return;
         }
 
+        clearCompareState();
         showPage("step-input");
     } catch (error) {
         showToast(`加载失败：${error.message}`);
@@ -1369,5 +1503,6 @@ async function deleteHistory(sessionId) {
 window.addEventListener("load", () => {
     setSaveState("idle", "未保存");
     updateBackButton();
+    updateCompareButton();
     updatePreview();
 });
